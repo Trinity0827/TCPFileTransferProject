@@ -17,9 +17,14 @@ public class TCPFileClient {
         }
         int serverPort = Integer.parseInt(args[1]);
         String command;
+        System.out.print("Enter your choice (D:Delete, L:List, R:Rename, U:Upload, N:Download) ");
+
+
+
         do { //do -> handle multiple command- 1 at a time
             Scanner keyboard = new Scanner(System.in);
             command = keyboard.nextLine().toUpperCase();
+
             switch (command) {
                 case "D": //delete
                     System.out.println("Please enter the file name:");
@@ -45,19 +50,19 @@ public class TCPFileClient {
                     }else {
                         System.out.println("Invalid server code received");
                     }
+                    channel.close();
                     break;
 
 
 
                 case "L": //list
-                    //Send L to Server
                     ByteBuffer listRequest = ByteBuffer.wrap(command.getBytes());
                     SocketChannel listChannel = SocketChannel.open();
                     listChannel.connect(new InetSocketAddress(args[0], serverPort));
                     listChannel.write(listRequest);
                     listChannel.shutdownOutput();
 
-                   // This is Reciving the file from server
+                    // This is Reciving the file from server
                     ByteBuffer listReply = ByteBuffer.allocate(1024);  // 1 KB buffer for list
                     listChannel.read(listReply);
                     listReply.flip();
@@ -66,21 +71,58 @@ public class TCPFileClient {
                     String fileList = new String(listBytes);
 
                     //showing list of files to the user
-                    System.out.println("Files on the server:\n" + fileList);
-
+                    System.out.println("The file listed is:\n" + fileList);
                     listChannel.close();
                     break;
 
 
-
-
-
                 case "R": //rename
+                    System.out.println("Enter the old file name:");
+                    String oldFileName = keyboard.nextLine();
+
+                    System.out.println("Enter the new file name:");
+                    String newFileName = keyboard.nextLine();
+
+                    // Combine the command "R" with old and new file names, separated by "|"
+                    String renameRequest = "R|" + oldFileName + "|" + newFileName;
+                    ByteBuffer renameBuffer = ByteBuffer.wrap(renameRequest.getBytes());
+
+                    SocketChannel renameChannel = SocketChannel.open();
+                    renameChannel.connect(new InetSocketAddress(args[0], serverPort));
+
+                    // Send the rename command with the old and new file names to the server
+                    renameChannel.write(renameBuffer);
+                    renameChannel.shutdownOutput();
+
+                    // Receive server's response (success or failure)
+                    ByteBuffer renameReply = ByteBuffer.allocate(1);
+                    renameChannel.read(renameReply);
+                    renameReply.flip();
+                    byte[] renameResponse = new byte[1];
+                    renameReply.get(renameResponse);
+                    String renameCode = new String(renameResponse);
+
+                    if (renameCode.equals("S")) {
+                        System.out.println("Operation successful.");
+                    } else if (renameCode.equals("F")) {
+                        System.out.println("Operation failed.");
+                    } else {
+                        System.out.println("Invalid server response received.");
+                    }
+
+                    renameChannel.close();
                     break;
+
+
                 case "U": //upload
                     break;
+
+
                 case "N": //download
                     break;
+
+
+
                 default:
                     if(command.equals("Q")) {
                         System.out.println("Invalid Command");

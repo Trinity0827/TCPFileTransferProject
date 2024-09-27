@@ -1,5 +1,6 @@
 package top_file_project;
 
+
 import java.io.File;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
@@ -48,9 +49,7 @@ public class TCPFilesServer {
                     serveChannel.close();
                     break;
 
-
                 case "L": //list
-                    //reading
                     System.out.println("Listing files...");
                     File folder = new File("ServerFiles");//This is going to read from the folder I made
                     File[] listOfFiles = folder.listFiles();
@@ -73,7 +72,40 @@ public class TCPFilesServer {
 
 
                 case "R": //rename
+                    byte[] renameData = new byte[request.remaining()];
+                    request.get(renameData);
+                    // This will be in the format "R|oldFileName|newFileName"
+                    String renameDetails = new String(renameData);
+
+                    // Split the details to get old and new file names
+                    String[] fileNames = renameDetails.split("\\|");
+                    String oldFileName = fileNames[1];
+                    String newFileName = fileNames[2];
+
+                    System.out.println("Renaming file: " + oldFileName + " to " + newFileName);
+
+                    File oldFile = new File("ServerFiles/" + oldFileName);
+                    File newFile = new File("ServerFiles/" + newFileName);
+
+                    boolean renameSuccess = false;
+                    if (oldFile.exists()) {
+                        renameSuccess = oldFile.renameTo(newFile);
+                    }
+
+                    String renameCode;
+                    if (renameSuccess) {
+                        System.out.println("File renamed successfully.");
+                        renameCode = "S";
+                    } else {
+                        System.out.println("Failed to rename file.");
+                        renameCode = "F";
+                    }
+
+                    ByteBuffer renameReply = ByteBuffer.wrap(renameCode.getBytes());
+                    serveChannel.write(renameReply);
+                    serveChannel.close();
                     break;
+
 
                 case "U": //upload
                     break;
