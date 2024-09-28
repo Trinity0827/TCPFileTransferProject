@@ -3,6 +3,7 @@ package top_file_project;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.channels.SocketChannel;
@@ -30,7 +31,7 @@ public class TCPFileClient {
 
             switch (command) {
                 case "D": //delete
-                    System.out.println("Please enter the file name:");
+                    System.out.println("Please enter the file name for deletion:");
                     String fileName = keyboard.nextLine();
                     ByteBuffer request =
                             ByteBuffer.wrap((command+fileName).getBytes());
@@ -118,7 +119,7 @@ public class TCPFileClient {
 
 
                 case "U": // Upload
-                    System.out.println("Please enter the file name:");
+                    System.out.println("Please enter the file name for upload:");
                     String uploadFileName = keyboard.nextLine();
                     File uploadFile = new File("ClientFiles/" + uploadFileName);
                     if (!uploadFile.exists()) {
@@ -162,23 +163,62 @@ public class TCPFileClient {
                     String uploadCode = new String(uploadResponse);
 
                     if (uploadCode.equals("S")) {
-                        System.out.println("File uploaded successfully.");
+                        System.out.println("Operation successful.");
                     } else {
-                        System.out.println("File upload failed.");
+                        System.out.println("Operation Failed.");
                     }
 
                     uploadChannel.close();
                     break;
 
+                case "N": // download
+                    System.out.println("Please enter the file name for download:");
+                    String downloadFileName = keyboard.nextLine();
 
-                case "N": //download
+                    String downloadRequest = "N|" + downloadFileName;
+                    ByteBuffer downloadBuffer = ByteBuffer.wrap(downloadRequest.getBytes());
+
+                    SocketChannel downloadChannel = SocketChannel.open();
+                    downloadChannel.connect(new InetSocketAddress(args[0], serverPort));
+
+                    downloadChannel.write(downloadBuffer);
+                    downloadChannel.shutdownOutput();
+
+                    ByteBuffer responseCodeBuffer = ByteBuffer.allocate(1);
+                    int downloadBytesRead = downloadChannel.read(responseCodeBuffer);
+                    responseCodeBuffer.flip();
+                    byte[] downloadResponse = new byte[1];
+                    responseCodeBuffer.get(downloadResponse);
+                    String responseCode = new String(downloadResponse);
+
+                    if (responseCode.equals("S")) {
+                        ByteArrayOutputStream fileContentStream = new ByteArrayOutputStream();
+                        ByteBuffer downloadContentBuffer = ByteBuffer.allocate(1024);
+
+                        while ((downloadBytesRead = downloadChannel.read(downloadContentBuffer)) > 0) {
+                            downloadContentBuffer.flip();
+                            fileContentStream.write(downloadContentBuffer.array(), 0, downloadContentBuffer.limit());
+                            downloadContentBuffer.clear();
+                        }
+
+                        byte[] fileContent = fileContentStream.toByteArray();
+                        FileOutputStream fos = new FileOutputStream("ClientFiles/" + downloadFileName);
+                        fos.write(fileContent);
+                        fos.close();
+
+                        System.out.println("Operation Successful.");
+                    } else if (responseCode.equals("F")) {
+                        System.out.println("Operation Failed.");
+                    } else {
+                        System.out.println("Invalid response from server.");
+                    }
+                    downloadChannel.close();
                     break;
-
-
 
                 default:
                     if(command.equals("Q")) {
                         System.out.println("Goodbye");
+                        break;
                     }
             }//switch
         } while (!command.equals("Q"));

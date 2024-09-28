@@ -3,6 +3,7 @@ package top_file_project;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
@@ -112,47 +113,42 @@ public class TCPFilesServer {
                 case "U": //upload
                     System.out.println("Receiving file upload...");
 
-                    // First, read the remaining data in 'request' buffer
-                    ByteArrayOutputStream incomingData = new ByteArrayOutputStream();
+                    ByteArrayOutputStream uploadData = new ByteArrayOutputStream();
                     if (request.hasRemaining()) {
-                        incomingData.write(request.array(), request.position(), request.remaining());
+                        uploadData.write(request.array(), request.position(), request.remaining());
                     }
 
-                    // Now read the rest of the data from the channel
-                    ByteBuffer fileBuffer = ByteBuffer.allocate(1024);
-                    while (serveChannel.read(fileBuffer) > 0) {
-                        fileBuffer.flip();
-                        incomingData.write(fileBuffer.array(), 0, fileBuffer.limit());
-                        fileBuffer.clear();
+                    ByteBuffer uploadDataBuffer = ByteBuffer.allocate(1024);
+                    while (serveChannel.read(uploadDataBuffer) > 0) {
+                        uploadDataBuffer.flip();
+                        uploadData.write(uploadDataBuffer.array(), 0, uploadDataBuffer.limit());
+                        uploadDataBuffer.clear();
                     }
 
-                    byte[] completeData = incomingData.toByteArray();
+                    byte[] completeUploadData = uploadData.toByteArray();
 
-                    // Continue with parsing the filename and file content as before
-                    // Locate the first and second delimiters to parse the filename
-                    int firstDelimiterIndex = -1;
-                    int secondDelimiterIndex = -1;
+                    int delIdx1 = -1;
+                    int delIdx2 = -1;
 
-                    // Scan for the two delimiters '|' in the incoming data
-                    for (int i = 0; i < completeData.length; i++) {
-                        if (completeData[i] == '|') {
-                            if (firstDelimiterIndex == -1) {
-                                firstDelimiterIndex = i;
+                    for (int i = 0; i < completeUploadData.length; i++) {
+                        if (completeUploadData[i] == '|') {
+                            if (delIdx1 == -1) {
+                                delIdx1 = i;
                             } else {
-                                secondDelimiterIndex = i;
-                                break; // Exit loop after finding the second delimiter
+                                delIdx2 = i;
+                                break;
                             }
                         }
                     }
 
-                    if (firstDelimiterIndex != -1 && secondDelimiterIndex != -1) {
-                        String uploadFileName = new String(completeData, firstDelimiterIndex + 1, secondDelimiterIndex - firstDelimiterIndex - 1);
+                    if (delIdx1 != -1 && delIdx2 != -1) {
+                        String uploadFileName = new String(completeUploadData, delIdx1 + 1, delIdx2 - delIdx1 - 1);
 
-                        byte[] fileContentBytes = new byte[completeData.length - secondDelimiterIndex - 1];
-                        System.arraycopy(completeData, secondDelimiterIndex + 1, fileContentBytes, 0, fileContentBytes.length);
+                        byte[] uploadContentBytes = new byte[completeUploadData.length - delIdx2 - 1];
+                        System.arraycopy(completeUploadData, delIdx2 + 1, uploadContentBytes, 0, uploadContentBytes.length);
 
                         FileOutputStream fos = new FileOutputStream("ServerFiles/" + uploadFileName);
-                        fos.write(fileContentBytes);
+                        fos.write(uploadContentBytes);
                         fos.close();
 
                         String uploadCode;
@@ -176,11 +172,48 @@ public class TCPFilesServer {
                     break;
 
 
+                case "N": // download
+                    System.out.println("Receiving file download...");
 
+                    byte[] downloadData = new byte[request.remaining()];
+                    request.get(downloadData);
+                    String downloadRequest = new String(downloadData);
 
+                    String[] downloadParts = downloadRequest.split("\\|");
+                    if (downloadParts.length < 2) {
+                        System.out.println("Invalid format.");
+                        ByteBuffer badResponseBuffer = ByteBuffer.wrap("F".getBytes());
+                        serveChannel.write(badResponseBuffer);
+                        serveChannel.close();
+                        break;
+                    }
 
-                case "N": //download
+                    String downloadFileName = downloadParts[1];
+                    File fileToSend = new File("ServerFiles/" + downloadFileName);
+
+                    if (fileToSend.exists() && fileToSend.isFile()) {
+                        System.out.println("Sending file: " + downloadFileName);
+
+                        ByteBuffer downloadSuccess = ByteBuffer.wrap("S".getBytes());
+                        serveChannel.write(downloadSuccess);
+
+                        FileInputStream fis = new FileInputStream(fileToSend);
+                        byte[] buffer = new byte[1024];
+                        int bytesRead;
+                        while ((bytesRead = fis.read(buffer)) > 0) {
+                            ByteBuffer fileContentBuffer = ByteBuffer.wrap(buffer, 0, bytesRead);
+                            serveChannel.write(fileContentBuffer);
+                        }
+                        fis.close();
+                        System.out.println("File sent successfully.");
+                    } else {
+                        System.out.println("File not found: " + downloadFileName);
+                        ByteBuffer downloadFail = ByteBuffer.wrap("F".getBytes());
+                        serveChannel.write(downloadFail);
+                    }
+                    serveChannel.close();
                     break;
+
                 default:
                     System.out.println("Invalid Command");
             }//switch
