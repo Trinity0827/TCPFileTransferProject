@@ -1,5 +1,8 @@
 package top_file_project;
 
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.channels.SocketChannel;
@@ -114,7 +117,57 @@ public class TCPFileClient {
                     break;
 
 
-                case "U": //upload
+                case "U": // Upload
+                    System.out.println("Please enter the file name:");
+                    String uploadFileName = keyboard.nextLine();
+                    File uploadFile = new File("ClientFiles/" + uploadFileName);
+                    if (!uploadFile.exists()) {
+                        System.out.println("File does not exist.");
+                        break;
+                    }
+
+                    long fileSize = uploadFile.length();
+                    FileInputStream fis = new FileInputStream(uploadFile);
+
+                    String uploadRequest = "U|" + uploadFileName + "|";
+                    ByteBuffer uploadBuffer = ByteBuffer.allocate(1024);
+
+                    SocketChannel uploadChannel = SocketChannel.open();
+                    uploadChannel.connect(new InetSocketAddress(args[0], serverPort));
+                    uploadChannel.write(ByteBuffer.wrap(uploadRequest.getBytes()));
+
+                    byte[] buffer = new byte[1024];
+                    int bytesRead;
+                    long totalBytesSent = 0;
+
+                    while ((bytesRead = fis.read(buffer)) != -1) {
+                        totalBytesSent += bytesRead;
+
+                        ByteBuffer chunkBuffer = ByteBuffer.wrap(buffer, 0, bytesRead);
+                        uploadChannel.write(chunkBuffer);
+
+                        if (totalBytesSent >= fileSize) {
+                            break;
+                        }
+                    }
+
+                    fis.close();
+                    uploadChannel.shutdownOutput();
+
+                    ByteBuffer uploadReply = ByteBuffer.allocate(1);
+                    uploadChannel.read(uploadReply);
+                    uploadReply.flip();
+                    byte[] uploadResponse = new byte[1];
+                    uploadReply.get(uploadResponse);
+                    String uploadCode = new String(uploadResponse);
+
+                    if (uploadCode.equals("S")) {
+                        System.out.println("File uploaded successfully.");
+                    } else {
+                        System.out.println("File upload failed.");
+                    }
+
+                    uploadChannel.close();
                     break;
 
 
@@ -125,7 +178,7 @@ public class TCPFileClient {
 
                 default:
                     if(command.equals("Q")) {
-                        System.out.println("Invalid Command");
+                        System.out.println("Goodbye");
                     }
             }//switch
         } while (!command.equals("Q"));

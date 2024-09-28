@@ -1,7 +1,9 @@
 package top_file_project;
 
 
+import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.FileOutputStream;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.channels.ServerSocketChannel;
@@ -108,7 +110,75 @@ public class TCPFilesServer {
 
 
                 case "U": //upload
+                    System.out.println("Receiving file upload...");
+
+                    // First, read the remaining data in 'request' buffer
+                    ByteArrayOutputStream incomingData = new ByteArrayOutputStream();
+                    if (request.hasRemaining()) {
+                        incomingData.write(request.array(), request.position(), request.remaining());
+                    }
+
+                    // Now read the rest of the data from the channel
+                    ByteBuffer fileBuffer = ByteBuffer.allocate(1024);
+                    while (serveChannel.read(fileBuffer) > 0) {
+                        fileBuffer.flip();
+                        incomingData.write(fileBuffer.array(), 0, fileBuffer.limit());
+                        fileBuffer.clear();
+                    }
+
+                    byte[] completeData = incomingData.toByteArray();
+
+                    // Continue with parsing the filename and file content as before
+                    // Locate the first and second delimiters to parse the filename
+                    int firstDelimiterIndex = -1;
+                    int secondDelimiterIndex = -1;
+
+                    // Scan for the two delimiters '|' in the incoming data
+                    for (int i = 0; i < completeData.length; i++) {
+                        if (completeData[i] == '|') {
+                            if (firstDelimiterIndex == -1) {
+                                firstDelimiterIndex = i;
+                            } else {
+                                secondDelimiterIndex = i;
+                                break; // Exit loop after finding the second delimiter
+                            }
+                        }
+                    }
+
+                    if (firstDelimiterIndex != -1 && secondDelimiterIndex != -1) {
+                        String uploadFileName = new String(completeData, firstDelimiterIndex + 1, secondDelimiterIndex - firstDelimiterIndex - 1);
+
+                        byte[] fileContentBytes = new byte[completeData.length - secondDelimiterIndex - 1];
+                        System.arraycopy(completeData, secondDelimiterIndex + 1, fileContentBytes, 0, fileContentBytes.length);
+
+                        FileOutputStream fos = new FileOutputStream("ServerFiles/" + uploadFileName);
+                        fos.write(fileContentBytes);
+                        fos.close();
+
+                        String uploadCode;
+                        boolean uploadSuccess = new File("ServerFiles/" + uploadFileName).exists();
+
+                        if (uploadSuccess) {
+                            System.out.println("File uploaded successfully.");
+                            uploadCode = "S";
+                        } else {
+                            System.out.println("File upload failed.");
+                            uploadCode = "F";
+                        }
+
+                        ByteBuffer uploadResponseBuffer = ByteBuffer.wrap(uploadCode.getBytes());
+                        serveChannel.write(uploadResponseBuffer);
+                    } else {
+                        System.out.println("Error: Invalid data format received.");
+                    }
+
+                    serveChannel.close();
                     break;
+
+
+
+
+
                 case "N": //download
                     break;
                 default:
